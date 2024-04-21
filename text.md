@@ -1,0 +1,6 @@
+0. create build server Dockerfile main.sh and script.js. script.js will push the code to s3 bucket and publish logs to redis using pub sub architecture
+1. Create S3 bucket 
+2. create a repository in ecr and using push commands push your docker file (requiures AWS CLI and AWS POWERSHELL setup)
+2. Create a cluster in ecs to run tasks basically run the docker files create task and pass enviroment variables and code will be available on s3 bucket
+3. make s3-reverse-proxy server to take URLs from user and map them to their respective code strored in s3 bucket (the reson for using the proxy server is because we don't want to download the whole s3 bucket and send it to user but we want to just map the s3 bucket url to personal project url and the bucket data will be streamed instead of downloading)
+4. create a api server to take git-url and slug (optional from user). The api server will subscribe to log collection pipeline and use socket.io to emit the logs to message. if an project is updated after changes then we can reupload that project to same slug and the URL will stay the same but the code will be updated. The api server creates task in ecs cluster which runs the docker image of ecr and uploads the github code to s3 bucket

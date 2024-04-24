@@ -68,6 +68,7 @@ async function init() {
         }
         publishLog(`Done`)
         console.log('Done ...')
+        process.exit(0) //to destroy the containers
     })
 }
 

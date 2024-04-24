@@ -3,12 +3,14 @@ const {generateSlug} = require('random-word-slugs')
 const {ECSClient, RunTaskCommand} = require('@aws-sdk/client-ecs')
 const Redis = require('ioredis')
 const { Server } = require('socket.io')
-
+const {z} = require('zod')
 const app = express()
 const PORT = 9000
-
+const {PrismaClient} = require('@prisma/client')
 const subscriber = new Redis('rediss://default:AVNS_Qrby43-ITir9eHjzD2R@redis-41014eb-yagnapatelhirenk-e786.d.aivencloud.com:18255')
 const io = new Server({ cors: '*' })
+
+const prisma = new PrismaClient()
 
 io.on('connection', socket => {
     socket.on('subscribe', channel => {
@@ -33,10 +35,39 @@ const config = {
 
 app.use(express.json())
 
-app.post('/project',async (req,res)=>{
-    const {gitURL,slug} = req.body
-    const projectSlug = slug || generateSlug()
+app.post('/project',async(req,res)=>{
+  const schema = z.object({
+    name:z.string(),
+    gitURL: z.string()
+  })
+  const safeParseResult = schema.safeParse(req.body)
+  if(safeParseResult.error) return res.status(400).json({error: safeParseResult.error})
+  const {name,gitURL} = safeParseResult.data
 
+  const project = await prisma.project.create({
+    data: {
+        name,
+        gitURL,
+        subDomain: generateSlug()
+    }
+})
+  return res.json({ status: 'success',data:{project}})
+})
+
+app.post('/deploy',async (req,res)=>{
+  const { projectId } = req.body
+
+  const project = await prisma.project.findUnique({ where: { id: projectId } })
+
+  if (!project) return res.status(404).json({ error: 'Project not found' })
+
+  // Check if there is no running deployement
+  const deployment = await prisma.deployment.create({
+      data: {
+          project: { connect: { id: projectId } },
+          status: 'QUEUED',
+      }
+  })
     //spin the container
     const command = new RunTaskCommand({
         cluster: config.CLUSTER,
@@ -61,11 +92,15 @@ app.post('/project',async (req,res)=>{
                     environment: [ // EnvironmentVariables
                       { // KeyValuePair
                         name: "GIT_REPOSITORY__URL",
-                        value: gitURL,
+                        value: project.gitURL,
                       },
                       { // KeyValuePair
                         name: "PROJECT_ID",
-                        value: projectSlug,
+                        value: project.subDomain,
+                      },
+                      { // KeyValuePair
+                        name: "DEPLOYMENT_ID",
+                        value: deployment.id,
                       },
                     ],
                 },
@@ -73,8 +108,7 @@ app.post('/project',async (req,res)=>{
           }
     })
     await ecsClient.send(command);
-    return res.json({status:'queued',data: {projectSlug, url: `http://${projectSlug}.localhost:8000`}})
-})
+    return res.json({ status: 'queued', data: { deploymentId: deployment.id,domain: project.subDomain} })})
 
 async function initRedisSubscribe() {
     console.log('Subscribed to logs....')

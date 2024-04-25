@@ -1,7 +1,7 @@
 const express = require('express')
 const http_proxy = require('http-proxy')
 const app = express()
-const PORT = 8000
+const PORT = process.env.PORT || 8000
 
 const BUCKET_PATH = `https://deployer-client-files.s3.ap-south-1.amazonaws.com/__outputs`
 

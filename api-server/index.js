@@ -32,7 +32,6 @@ const config = {
     CLUSTER:'arn:aws:ecs:ap-south-1:851725489597:cluster/build-cluster',
     TASK:'arn:aws:ecs:ap-south-1:851725489597:task-definition/build-task'
 }
-
 app.use(express.json())
 
 app.post('/project',async(req,res)=>{
@@ -43,19 +42,39 @@ app.post('/project',async(req,res)=>{
   const safeParseResult = schema.safeParse(req.body)
   if(safeParseResult.error) return res.status(400).json({error: safeParseResult.error})
   const {name,gitURL} = safeParseResult.data
-
-  const project = await prisma.project.create({
-    data: {
-        name,
-        gitURL,
-        subDomain: generateSlug()
+  var exist=0;
+  let project=false;
+  if(req.body.slug){
+    exist = await prisma.project.findFirst({where: {subDomain: req.body.slug}})
+  }
+    if(exist!==0) {
+      project = await prisma.project.update({
+        where: { id: exist.id },
+        data: { name:name, gitURL: gitURL }
+      });
     }
-})
+    else {
+      project = await prisma.project.create({
+        data: {
+            name,
+            gitURL,
+            subDomain: generateSlug()
+        }
+    })
+    }
   return res.json({ status: 'success',data:{project}})
 })
+app.get('/', (req, res) => {
+  res.sendFile(__dirname + '/index.html');
+});
+
+// Serve the generated .mp3 file
+app.get('/audio', (req, res) => {
+  res.sendFile(__dirname + '/hello_world.mp3');
+});
 
 app.post('/deploy',async (req,res)=>{
-  const { projectId } = req.body
+  const { projectId} = req.body
 
   const project = await prisma.project.findUnique({ where: { id: projectId } })
 
